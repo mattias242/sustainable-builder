@@ -6,6 +6,7 @@ import { personBatch, PEOPLE } from './folk.js';
 import { LAND } from './landuse.js';
 import { hash, closestOnSegment, pointInPolygon } from './planning.js';
 import { FUTURE } from './future.js';
+import { siteCells, lotTurn } from './sites.js';
 
 // Places the physical 2126 city on the real map: verge trees and cultivation beds on depaved streets,
 // food parks on today's car parks, food forests in the parks, market stalls and long tables on the
@@ -45,14 +46,18 @@ export function createFeatures(scene,planning,land,{lite=false,skipLot=()=>false
     }
   }
   // Parking lots: a food park per lot. 48 m cells convert together.
-  const lotOrder=c=>.05+hash(Math.floor(c.x/48)*131+Math.floor(c.z/48)*17+3)*.85;
-  planning.paintLots(land.cells(LAND.PARKING).map(c=>({...c,service:planning.roadAt(c.x,c.z,.5)?.kind==='service'})),lotOrder,FUTURE.uPlan.value);
-  for(const c of land.cells(LAND.PARKING)){
+  const sitePlots=siteCells(land,planning),anySite=sitePlots.length>0;
+  const lotOrder=c=>lotTurn(hash(Math.floor(c.x/48)*131+Math.floor(c.z/48)*17+3),c.site,anySite);
+  // Building land the place points out (sites.js) turns into yards the same way; no cars stand there today
+  // and no greenhouses are put there.
+  const plots=[...land.cells(LAND.PARKING),...sitePlots];
+  planning.paintLots(plots.map(c=>({...c,service:!c.site&&planning.roadAt(c.x,c.z,.5)?.kind==='service'})),lotOrder,FUTURE.uPlan.value);
+  for(const c of plots){
     const i=Math.round(c.x/4),j=Math.round(c.z/4),h=hash(i*7.13+j*3.71);
     const order=lotOrder(c);
-    if(i%2===0&&j%2===0&&h<.85)items.parkedLots.push({x:c.x,y:c.y,z:c.z,rot:(Math.floor(c.x/48)%2)*Math.PI/2+(h<.5?0:Math.PI),order,color:pick(hues.car,h)});
+    if(!c.site&&i%2===0&&j%2===0&&h<.85)items.parkedLots.push({x:c.x,y:c.y,z:c.z,rot:(Math.floor(c.x/48)%2)*Math.PI/2+(h<.5?0:Math.PI),order,color:pick(hues.car,h)});
     if(skipLot(c.x,c.z))continue;
-    if(i%5===0&&j%3===0&&h<.35)items.greenhouses.push({x:c.x,y:c.y,z:c.z,rot:Math.PI/2*(Math.floor(c.z/48)%2),order:order+.02,sx:1,sz:1});
+    if(!c.site&&i%5===0&&j%3===0&&h<.35)items.greenhouses.push({x:c.x,y:c.y,z:c.z,rot:Math.PI/2*(Math.floor(c.z/48)%2),order:order+.02,sx:1,sz:1});
     else if(i%3===0&&j%3===1&&h<.55)items.farmTrees.push({x:c.x+h,y:c.y,z:c.z-h,rot:h*6.3,order:order+.01,scale:.9+h*.4,color:pick(hues.fruit,h)});
     else if(j%2===0&&i%2===1&&h<.6)items.farmBeds.push({x:c.x,y:c.y,z:c.z,rot:Math.PI/2*(Math.floor(c.x/48)%2),order:order+.03});
   }

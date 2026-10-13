@@ -6,6 +6,7 @@ import { hash } from './planning.js';
 import { kitMaterial } from './kit.js';
 import * as K from './meshes.js';
 import { CITY } from './city-config.js';
+import { siteCells, housingMinZ, lotTurn } from './sites.js';
 
 // What the city builds where the cars stood: timber neighbourhoods (Sjökvarteren) on the big car
 // parks south and west of Kvarnholmen – four to seven storeys of cross-laminated timber with
@@ -57,26 +58,29 @@ function timberMaterial(){
 const unitBox=()=>new THREE.BoxGeometry(1,1,1).translate(0,.5,0);
 
 export function createDistricts(scene,planning,land,{lite=false}={}){
-  // Car-park clusters by 48 m cell.
+  // Car-park clusters by 48 m cell – and the building land the place points out itself (sites.js: Mölndal's Forsåker).
+  const lots=[...land.cells(LAND.PARKING),...siteCells(land,planning)];
   const groups=new Map();
-  for(const c of land.cells(LAND.PARKING)){const k=Math.floor(c.x/48)+','+Math.floor(c.z/48);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(c);}
-  const cellSet=new Set(land.cells(LAND.PARKING).map(c=>Math.round(c.x)+','+Math.round(c.z)));
+  for(const c of lots){const k=Math.floor(c.x/48)+','+Math.floor(c.z/48);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(c);}
+  const cellSet=new Set(lots.map(c=>Math.round(c.x)+','+Math.round(c.z)));
   const onLot=(x,z)=>cellSet.has((Math.floor((x-land.minX)/land.step)*land.step+land.minX+land.step/2)+','+(Math.floor((z-land.minZ)/land.step)*land.step+land.minZ+land.step/2));
   const clusters=[...groups.entries()].map(([k,cells])=>{const xs=cells.map(c=>c.x),zs=cells.map(c=>c.z);
-    return {k,cells,n:cells.length,minX:Math.min(...xs)-2,maxX:Math.max(...xs)+2,minZ:Math.min(...zs)-2,maxZ:Math.max(...zs)+2,cx:xs.reduce((a,b)=>a+b)/xs.length,cz:zs.reduce((a,b)=>a+b)/zs.length,y:cells.reduce((a,c)=>a+c.y,0)/cells.length};})
+    return {k,cells,n:cells.length,site:cells.filter(c=>c.site).length>cells.length/2,minX:Math.min(...xs)-2,maxX:Math.max(...xs)+2,minZ:Math.min(...zs)-2,maxZ:Math.max(...zs)+2,cx:xs.reduce((a,b)=>a+b)/xs.length,cz:zs.reduce((a,b)=>a+b)/zs.length,y:cells.reduce((a,c)=>a+c.y,0)/cells.length};})
     .filter(c=>planning.onIsland(c.cx,c.cz));
   // The tower stands on the big lot by the station; housing on the large lots of the south shore and the west.
   const station=CITY.station||{x:0,z:0};
-  const towerSite=clusters.filter(c=>c.n>=80).sort((a,b)=>Math.hypot(a.cx-station.x,a.cz-station.z)-Math.hypot(b.cx-station.x,b.cz-station.z))[0];
-  const housingLots=clusters.filter(c=>c!==towerSite&&c.n>=40&&c.cz>40);
+  // (A place without a tower keeps the lot for homes: CITY.tower false. Building land always gets blocks;
+  // car parks where the place has them – south of housingMinZ, Kalmar's 40 by default.)
+  const towerSite=CITY.tower===false?undefined:clusters.filter(c=>c.n>=80&&!c.site).sort((a,b)=>Math.hypot(a.cx-station.x,a.cz-station.z)-Math.hypot(b.cx-station.x,b.cz-station.z))[0];
+  const minZ=housingMinZ(),housingLots=clusters.filter(c=>c!==towerSite&&c.n>=40&&(c.site||c.cz>minZ));
   const used=new Set(housingLots.map(c=>c.k));if(towerSite)used.add(towerSite.k);
-  const blocks=[];
+  const blocks=[],anySite=housingLots.some(l=>l.site);
   let seed=1;const R=()=>hash(seed++*1.37);
   for(const lot of housingLots){
     const w=lot.maxX-lot.minX,d=lot.maxZ-lot.minZ,alongX=w>=d;
     const depth=12,gap=13,len=alongX?w:d,across=alongX?d:w;
     const rows=Math.max(1,Math.floor((across+gap)/(depth+gap)));
-    const order=.05+R()*.85;
+    const order=lotTurn(R(),lot.site,anySite);
     for(let r=0;r<rows;r++){
       const off=(r-(rows-1)/2)*(depth+gap);
       // Split each row into houses 18–30 m long with passages between.
