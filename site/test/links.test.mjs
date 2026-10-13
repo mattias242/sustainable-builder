@@ -22,7 +22,8 @@ test('no choices at all is the current course',()=>{
 });
 test('a vision someone has changed gets a code, not the name',()=>{
   // The place's research-based vision (its first), changed a little.
-  const p=PRESETS[1],changed=structuredClone(p.schedule);changed[0].set.ai=changed[0].set.ai===3?2:3;
+  // (One of the place's own levers: the first its vision sets.)
+  const p=PRESETS[1],changed=structuredClone(p.schedule),k=Object.keys(changed[0].set)[0];changed[0].set[k]=changed[0].set[k]===3?2:3;
   const hash=planHash({schedule:changed,world:'ssp245',preset:p.id},2100);
   assert.match(hash,/^[12][0-9A-Za-z]+-2100$/);
   assert.ok(hash.length<60,`${hash.length} characters`);
