@@ -53,11 +53,14 @@ if os.environ.get('WB_FOG') == '1' and scene.render.engine != 'BLENDER_WORKBENCH
     hm = bpy.data.materials.new('Haze')
     hm.use_nodes = True
     hn = hm.node_tree
-    hn.nodes.remove(hn.nodes['Principled BSDF'])
+    # Found by type: Blender 5 names the default nodes in the interface language, or adds none.
+    for node in [n for n in hn.nodes if n.type == 'BSDF_PRINCIPLED']:
+        hn.nodes.remove(node)
+    out_node = next((n for n in hn.nodes if n.type == 'OUTPUT_MATERIAL'), None) or hn.nodes.new('ShaderNodeOutputMaterial')
     vol = hn.nodes.new('ShaderNodeVolumePrincipled')
     vol.inputs['Density'].default_value = float(os.environ.get('WB_FOG_DENSITY', '0.006'))
     vol.inputs['Color'].default_value = (0.95, 0.7, 0.48, 1)
-    hn.links.new(vol.outputs['Volume'], hn.nodes['Material Output'].inputs['Volume'])
+    hn.links.new(vol.outputs['Volume'], out_node.inputs['Volume'])
     haze.data.materials.append(hm)
 
 cams = []
