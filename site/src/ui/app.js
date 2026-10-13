@@ -7,6 +7,7 @@ import { LEVER_EVIDENCE, EVIDENCE, BASELINE, QUOTES } from '../data/evidence.js'
 import { NEEDS } from '../residents.js';
 import { run, bands, PRESETS, START, END, planHash, parsePlanHash } from '../scenario.js';
 import { flooded, FLOOD } from '../model.js';
+import { floodWords } from '../flood-words.js';
 import { t, L, LANG, LANGS, LOCALE, setLang, dec, pct as fmtPct } from '../i18n.js';
 import { createJourney } from './journey.js';
 import { FAMILY, FAMILY_INTRO, FAMILY_TITLE, lifespans, alive, familyText } from '@city/family.js';
@@ -18,6 +19,8 @@ import { CHANGES, ranked, changeSpec } from '@city/changes.js';
 import { weatherOf } from '../weather.js';
 import { drawPostcard } from './postcard.js';
 import { buildPrintout, printout } from './printout.js';
+// The words for a high water, by the kind of water the place lies on (the sea, a lake or a river).
+const WORDS=floodWords(FLOOD?.kind);
 
 // The interface around the 3D city: levers on the left, goals/doughnut/figures/chronicle on the right,
 // the century timeline at the bottom, a Sims-style card for the selected resident, and pins for places.
@@ -297,8 +300,7 @@ export function createApp(engine){
           tile.append(el('div','delta '+(small?'flat':good===null?'flat':good?'up':'down'),small?t('oförändrat','unchanged','invariato'):`${dv>0?'▲':'▼'} ${t('från','from','da')} ${meta.fmt(v0)}`));}
         tile.append(sparkline(vals,{index:yi,width:150,height:30,color:THEME[meta.theme]?.color||'#2f7d4f',fmt:meta.fmt,years:S.run.years.map(y=>y.year),band:bandOf(k)}));
         if(meta.assumption){const f=el('span','flag',t('modell','model','modello'));f.title=t('Modellbegrepp eller antagande – se "Om modellen"','Model concept or assumption – see "About the model"','Concetto del modello o ipotesi – vedi "Informazioni sul modello"');tile.append(f);}
-        if(k==='floodShare'){tile.classList.add('clickable');tile.classList.toggle('on',Boolean(S.floodPreview));tile.title=FLOOD?.kind==='lake'?(S.floodPreview?t('Klicka för att dölja högvattnet','Click to hide the high water','Clicca per nascondere la piena'):t('Klicka för att se ett 100-årshögvatten i 3D just det här året','Click to see a 100-year high water in 3D in this very year',"Clicca per vedere in 3D una piena centenaria proprio in quest'anno"))
-          :S.floodPreview?t('Klicka för att dölja stormen','Click to hide the storm',"Clicca per nascondere l'acqua alta"):t('Klicka för att se en 100-årsstorm i 3D just det här året','Click to see a 100-year storm in 3D in this very year',"Clicca per vedere in 3D un'acqua alta centenaria proprio in quest'anno");
+        if(k==='floodShare'){tile.classList.add('clickable');tile.classList.toggle('on',Boolean(S.floodPreview));tile.title=t(...(S.floodPreview?WORDS.hide:WORDS.show));
           tile.onclick=()=>{S.floodPreview=!S.floodPreview;if(S.floodPreview)engine.flyTo(150,40);applyYear();renderDashboard(true);};
           tile.setAttribute('role','button');tile.tabIndex=0;tile.setAttribute('aria-pressed',String(Boolean(S.floodPreview)));tile.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();tile.onclick();}};}
         const src=meta.base&&BASELINE[meta.base];
@@ -388,19 +390,14 @@ export function createApp(engine){
     const BR=FLOOD?.barrier,shut=BR&&level!=null&&level>(d.ind.barrierCloses??BR.closes),inside=shut?Math.min(level,d.ind.barrierInside??BR.inside):level;
     engine.setFlood?.(inside);
     if(level==null){floodBadge.hidden=true;return;}
-    const prot=d.ind.protection,lvl=dec(level,2),head=S.floodPreview?(FLOOD?.kind==='lake'?t(`100-årshögvatten år ${year}`,`100-year high water in ${year}`,`Piena centenaria nel ${year}`):t(`100-årsstorm år ${year}`,`100-year storm in ${year}`,`Acqua alta centenaria nel ${year}`)):`${ev.title} ${year}`;
-    // By the sea a wall and quays (Kalmar's quay edge at 1.5 m); by a lake raised shores, beaches and jetties
-    // (FLOOD.quay: where the water starts to cover them, else half a metre below the streets).
-    const lake=FLOOD?.kind==='lake',quay=FLOOD?.quay??(lake?FLOOD.streets-.5:1.5),raised=prot>(FLOOD?.streets??1.8)+.05;
+    const prot=d.ind.protection,lvl=dec(level,2),head=S.floodPreview?t(...WORDS.head(year)):`${ev.title} ${year}`;
+    // The wording follows the kind of water (flood-words.js): by the sea a wall and quays (Kalmar's quay edge at
+    // 1.5 m), by a lake or a river its own edge (FLOOD.quay: where the water passes it, else half a metre below the streets).
+    const quay=FLOOD?.quay??(WORDS.inland?FLOOD.streets-.5:1.5),raised=prot>(FLOOD?.streets??1.8)+.05;
     const text=shut?(inside>prot?t(`${head}: havet når ${lvl} m – ${BR.name} stänger, och i staden stannar vattnet på ${dec(inside,2)} m: ${Math.round(flooded(inside)*100)} % av ${PLACE.centre} står under vatten.`,`${head}: the sea reaches ${lvl} m – ${BR.name} closes, and in the city the water stops at ${dec(inside,2)} m: ${Math.round(flooded(inside)*100)}% of ${PLACE.centre} is under water.`,`${head}: il mare raggiunge ${lvl} m – si alza la barriera ${BR.name} e in città l'acqua si ferma a ${dec(inside,2)} m: ${Math.round(flooded(inside)*100)}% ${PLACE.centreGenitive} sott'acqua.`)
         :t(`${head}: havet når ${lvl} m – ${BR.name} stänger, och staden klarar sig.`,`${head}: the sea reaches ${lvl} m – ${BR.name} closes, and the city stays dry.`,`${head}: il mare raggiunge ${lvl} m – si alza la barriera ${BR.name} e la città resta all'asciutto.`))
       :level>prot?t(`${head}: vattnet når ${lvl} m och ${Math.round(flooded(level)*100)} % av ${PLACE.centre} står under vatten.`,`${head}: the water reaches ${lvl} m and ${Math.round(flooded(level)*100)}% of ${PLACE.centre} is under water.`,`${head}: l'acqua raggiunge ${lvl} m – ${Math.round(flooded(level)*100)}% ${PLACE.centreGenitive} sott'acqua.`)
-      :raised?(lake?t(`${head}: vattnet når ${lvl} m – det höjda strandskyddet på ${dec(prot,1)} m håller.`,`${head}: the water reaches ${lvl} m – the raised shore protection at ${dec(prot,1)} m holds.`,`${head}: l'acqua raggiunge ${lvl} m – la difesa delle rive, rialzata a ${dec(prot,1)} m, tiene.`)
-        :t(`${head}: vattnet når ${lvl} m – vallen på ${dec(prot,1)} m håller.`,`${head}: the water reaches ${lvl} m – the ${dec(prot,1)} m flood wall holds.`,`${head}: l'acqua raggiunge ${lvl} m – l'argine di ${dec(prot,1)} m tiene.`))
-      :level>quay?(lake?t(`${head}: vattnet når ${lvl} m – stränder och bryggor står under vatten, men gatorna klarar sig.`,`${head}: the water reaches ${lvl} m – beaches and jetties are under water, but the streets stay dry.`,`${head}: l'acqua raggiunge ${lvl} m – spiagge e pontili sono sott'acqua, ma le strade restano all'asciutto.`)
-        :t(`${head}: vattnet når ${lvl} m – kajerna spolas över, men gatorna klarar sig.`,`${head}: the water reaches ${lvl} m – the quays are washed over, but the streets stay dry.`,`${head}: l'acqua raggiunge ${lvl} m – le banchine vengono sommerse, ma le strade restano all'asciutto.`))
-      :lake?t(`${head}: vattnet når ${lvl} m – under strandkanten.`,`${head}: the water reaches ${lvl} m – below the shoreline.`,`${head}: l'acqua raggiunge ${lvl} m – sotto il livello della riva.`)
-      :t(`${head}: vattnet når ${lvl} m – under kajkanten.`,`${head}: the water reaches ${lvl} m – below the quay edge.`,`${head}: l'acqua raggiunge ${lvl} m – sotto il bordo delle banchine.`);
+      :(([sv,en,it])=>t(`${head}: ${sv}`,`${head}: ${en}`,`${head}: ${it}`))(raised?WORDS.holds(lvl,dec(prot,1)):level>quay?WORDS.over(lvl):WORDS.below(lvl));
     floodBadge.replaceChildren(el('span','',text));
     if(S.floodPreview){const x=el('button','',t('Dölj','Hide','Nascondi'));x.onclick=()=>{S.floodPreview=false;applyYear();renderDashboard(true);};floodBadge.append(x);}
     floodBadge.hidden=false;
