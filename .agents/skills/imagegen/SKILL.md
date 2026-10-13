@@ -7,7 +7,9 @@ description: Generate bitmap art for a place's vision site – above all the lin
 
 The link preview (Messenger, Slack, LinkedIn …) shows `cities/<slug>/pack/og.jpg` (1200×630; the page's
 title and description come from `vision/config.js` → `meta`). The free way is a picture of the running
-site (`python3 sustainable.py look <slug>` takes them; crop one to 1200×630). A painted one:
+site (`python3 sustainable.py look <slug>` takes them); in `site/`,
+`CITY=<slug> node --import ./test/register.mjs tools/og-image.mjs <picture>` lays the place's title and taglines
+over one and writes `media/og.jpg` and `pack/og.jpg` (without a picture: the film's poster). A painted one:
 
 ## Link-preview recipe
 
